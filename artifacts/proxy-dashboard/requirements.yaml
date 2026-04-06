@@ -1,0 +1,21 @@
+packages:
+  "framer-motion": "For beautiful page transitions and micro-interactions"
+  "date-fns": "For formatting relative times (last checked ago)"
+  "clsx": "Utility for constructing className strings conditionally"
+  "tailwind-merge": "Utility to merge tailwind classes safely"
+  "@radix-ui/react-dialog": "For accessible modal dialogs"
+  "@radix-ui/react-slot": "For component composition"
+  "@radix-ui/react-toast": "For toast notifications"
+
+images:
+  - path: "artifacts/proxy-dashboard/public/images/gateway-bg.png"
+    description: "Dark, sleek abstract tech background with glowing teal and purple neural network nodes or data streams, very professional and modern"
+    aspect_ratio: "16:9"
+  - path: "artifacts/proxy-dashboard/public/images/logo-icon.png"
+    description: "Minimalist glowing neon teal shield or gateway icon on a transparent or dark background, professional tech logo"
+    aspect_ratio: "1:1"
+
+notes:
+  - "Using generated Orval hooks from @workspace/api-client-react"
+  - "The dashboard is unauthenticated as requested, but interacts with authenticated gateway endpoints"
+  - "Using a custom dark theme as the default"
