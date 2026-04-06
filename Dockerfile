@@ -3,11 +3,13 @@ FROM node:18
 WORKDIR /app
 
 COPY package*.json ./
+COPY pnpm-lock.yaml ./
 
-RUN npm install
+RUN npm install -g pnpm
+RUN pnpm install
 
 COPY . .
 
-RUN npm run build || true
+RUN pnpm run build || true
 
-CMD ["npm", "start"]
+CMD ["pnpm", "start"]
