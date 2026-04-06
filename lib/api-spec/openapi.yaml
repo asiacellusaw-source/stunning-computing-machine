@@ -1,0 +1,1066 @@
+openapi: 3.1.0
+info:
+  title: Api
+  version: 0.1.0
+  description: Proxy Gateway Management API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: proxies
+    description: Proxy management operations
+  - name: stats
+    description: Statistics operations
+  - name: gateway
+    description: Gateway operations
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a new account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "409":
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/verify-email:
+    post:
+      operationId: verifyEmail
+      tags: [auth]
+      summary: Verify email with a code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyEmailRequest"
+      responses:
+        "200":
+          description: Email verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          description: Invalid or expired code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Log in and receive a session cookie
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Unverified or banned account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Log out and clear session cookie
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current authenticated user
+      responses:
+        "200":
+          description: Current user info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /proxies:
+    get:
+      operationId: listProxies
+      tags: [proxies]
+      summary: List user's proxies
+      description: Returns the authenticated user's proxies with optional filters and pagination
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [working, failed, unchecked]
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Paginated list of proxies
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedProxies"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: uploadProxies
+      tags: [proxies]
+      summary: Upload proxies
+      description: Upload a list of proxies in ip:port format
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadProxiesRequest"
+      responses:
+        "200":
+          description: Upload result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadProxiesResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: bulkDeleteProxies
+      tags: [proxies]
+      summary: Bulk delete proxies by status filter
+      parameters:
+        - name: filter
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [all, working, failed, unchecked]
+      responses:
+        "200":
+          description: Bulk delete result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkDeleteResponse"
+        "400":
+          description: Invalid filter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /proxies/{id}:
+    delete:
+      operationId: deleteProxy
+      tags: [proxies]
+      summary: Delete a proxy
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Proxy deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteProxyResponse"
+        "404":
+          description: Proxy not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateProxy
+      tags: [proxies]
+      summary: Update a proxy
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProxyRequest"
+      responses:
+        "200":
+          description: Updated proxy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Proxy"
+        "404":
+          description: Proxy not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /stats:
+    get:
+      operationId: getStats
+      tags: [stats]
+      summary: Get proxy statistics for the authenticated user
+      responses:
+        "200":
+          description: Proxy statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProxyStats"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /stats/requests:
+    get:
+      operationId: getRequestStats
+      tags: [stats]
+      summary: Get gateway request statistics
+      description: Returns request counts, top domains, and recent request log
+      responses:
+        "200":
+          description: Request statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestStats"
+        "500":
+          description: Failed to get request stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /gateway/info:
+    get:
+      operationId: getGatewayInfo
+      tags: [gateway]
+      summary: Get gateway connection info
+      description: Returns the gateway address in ip:port:user:pass format
+      responses:
+        "200":
+          description: Gateway connection info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GatewayInfo"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /gateway/replit-node:
+    get:
+      operationId: getReplitNodeStatus
+      tags: [gateway]
+      summary: Check if Replit server is registered as a proxy node
+      description: Returns whether the server's own egress IP is already in the proxy pool
+      responses:
+        "200":
+          description: Replit node status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReplitNodeStatus"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Failed to check node status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /gateway/add-node:
+    post:
+      operationId: addReplitNode
+      tags: [gateway]
+      summary: Add Replit server as a proxy node
+      description: Fetches the server's own public egress IP and registers it as a proxy entry
+      responses:
+        "200":
+          description: Replit node added or already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AddReplitNodeResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Failed to add node
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /gateway/fetch:
+    post:
+      operationId: gatewayFetch
+      tags: [gateway]
+      summary: Make a request through the rotating proxy pool
+      description: Sends an HTTP/HTTPS request through a random working proxy from the pool and returns the response
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GatewayFetchRequest"
+      responses:
+        "200":
+          description: Proxy request completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GatewayFetchResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Proxy request failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: No working proxies available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /gateway/test:
+    post:
+      operationId: gatewayTest
+      tags: [gateway]
+      summary: Test the rotating proxy gateway
+      description: Makes a test request through a random working proxy to verify the gateway is functioning
+      responses:
+        "200":
+          description: Test result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GatewayTestResponse"
+        "503":
+          description: No working proxies available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /gateway/test-rotate:
+    post:
+      operationId: gatewayTestRotate
+      tags: [gateway]
+      summary: Test the rotating proxy via the proxy protocol
+      description: Connects to the server's own proxy port using Proxy-Authorization, routing a request through a random working proxy to verify the rotate proxy flow
+      responses:
+        "200":
+          description: Test result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GatewayTestResponse"
+        "502":
+          description: Rotate proxy test failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GatewayTestResponse"
+
+  /proxies/scrape:
+    post:
+      operationId: scrapeProxies
+      tags: [proxies]
+      summary: Fetch free proxies from online sources
+      description: Scrapes multiple free proxy list websites, imports unique proxies, and triggers a health check
+      responses:
+        "200":
+          description: Scrape result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScrapeResult"
+        "500":
+          description: Scrape failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /proxies/check-all:
+    post:
+      operationId: checkAllProxies
+      tags: [proxies]
+      summary: Trigger proxy health check
+      description: Triggers an immediate health check of all proxies
+      responses:
+        "200":
+          description: Check triggered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckAllResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /proxies/check-active:
+    post:
+      operationId: checkActiveProxies
+      tags: [proxies]
+      summary: Check working and unchecked proxies
+      description: Triggers health check for working and unchecked proxies only
+      responses:
+        "200":
+          description: Check triggered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckAllResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /proxies/check-unchecked:
+    post:
+      operationId: checkUncheckedProxies
+      tags: [proxies]
+      summary: Check unchecked proxies only
+      description: Triggers health check for unchecked proxies only
+      responses:
+        "200":
+          description: Check triggered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckAllResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /proxies/check-failed:
+    post:
+      operationId: checkFailedProxies
+      tags: [proxies]
+      summary: Re-check failed proxies
+      description: Triggers health check for failed proxies only
+      responses:
+        "200":
+          description: Check triggered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckAllResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    RegisterRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+      required:
+        - email
+        - password
+
+    VerifyEmailRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        code:
+          type: string
+          minLength: 6
+          maxLength: 6
+      required:
+        - email
+        - code
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required:
+        - email
+        - password
+
+    AuthUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        isAdmin:
+          type: boolean
+        isVerified:
+          type: boolean
+        isBanned:
+          type: boolean
+      required:
+        - id
+        - email
+        - isAdmin
+        - isVerified
+        - isBanned
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+        - message
+
+    Proxy:
+      type: object
+      properties:
+        id:
+          type: integer
+        ip:
+          type: string
+        port:
+          type: integer
+        status:
+          type: string
+          enum: [working, failed, unchecked]
+        latency:
+          type: number
+          nullable: true
+        lastChecked:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+      required:
+        - id
+        - ip
+        - port
+        - status
+        - latency
+        - lastChecked
+        - createdAt
+
+    UploadProxiesRequest:
+      type: object
+      properties:
+        proxies:
+          type: string
+          description: Newline-separated list of ip:port proxies
+      required:
+        - proxies
+
+    UploadProxiesResponse:
+      type: object
+      properties:
+        added:
+          type: integer
+        skipped:
+          type: integer
+        total:
+          type: integer
+        message:
+          type: string
+      required:
+        - added
+        - skipped
+        - total
+        - message
+
+    DeleteProxyResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required:
+        - success
+        - message
+
+    BulkDeleteResponse:
+      type: object
+      properties:
+        deleted:
+          type: integer
+        message:
+          type: string
+      required:
+        - deleted
+        - message
+
+    UpdateProxyRequest:
+      type: object
+      properties:
+        ip:
+          type: string
+        port:
+          type: integer
+        status:
+          type: string
+          enum: [working, failed, unchecked]
+
+    ProxyStats:
+      type: object
+      properties:
+        total:
+          type: integer
+        working:
+          type: integer
+        failed:
+          type: integer
+        unchecked:
+          type: integer
+        avgLatency:
+          type: number
+          nullable: true
+      required:
+        - total
+        - working
+        - failed
+        - unchecked
+        - avgLatency
+
+    GatewayInfo:
+      type: object
+      properties:
+        address:
+          type: string
+          description: "Gateway address in ip:port:user:pass format"
+        host:
+          type: string
+        port:
+          type: integer
+        username:
+          type: string
+        workingProxies:
+          type: integer
+        tcpPort:
+          type: integer
+          description: "Direct TCP proxy server port"
+        tcpAddress:
+          type: string
+          description: "TCP proxy address in host:port:user:pass format"
+      required:
+        - address
+        - host
+        - port
+        - username
+        - workingProxies
+        - tcpPort
+        - tcpAddress
+
+    CheckAllResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        count:
+          type: integer
+      required:
+        - message
+        - count
+
+    ReplitNodeStatus:
+      type: object
+      properties:
+        exists:
+          type: boolean
+          description: True if the Replit server's egress IP is already registered as a proxy node
+        ip:
+          type: string
+          nullable: true
+        port:
+          type: integer
+          nullable: true
+        proxy:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/Proxy"
+      required:
+        - exists
+        - ip
+        - port
+        - proxy
+
+    AddReplitNodeResponse:
+      type: object
+      properties:
+        added:
+          type: boolean
+          description: True if a new node was inserted, false if it already existed
+        proxy:
+          $ref: "#/components/schemas/Proxy"
+        message:
+          type: string
+      required:
+        - added
+        - proxy
+        - message
+
+    ScrapeResult:
+      type: object
+      properties:
+        message:
+          type: string
+        totalFetched:
+          type: integer
+        added:
+          type: integer
+        skipped:
+          type: integer
+        sources:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScrapeSourceResult"
+        checkTriggered:
+          type: boolean
+      required:
+        - message
+        - totalFetched
+        - added
+        - skipped
+        - sources
+        - checkTriggered
+
+    ScrapeSourceResult:
+      type: object
+      properties:
+        source:
+          type: string
+        count:
+          type: integer
+        success:
+          type: boolean
+        error:
+          type: string
+          nullable: true
+      required:
+        - source
+        - count
+        - success
+
+    GatewayFetchRequest:
+      type: object
+      properties:
+        url:
+          type: string
+          description: Target URL to fetch through the proxy pool
+        method:
+          type: string
+          default: GET
+          description: HTTP method (GET, POST, PUT, DELETE, etc.)
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+          description: Optional headers to forward
+        body:
+          type: string
+          nullable: true
+          description: Optional request body
+      required:
+        - url
+
+    GatewayFetchResponse:
+      type: object
+      properties:
+        status:
+          type: integer
+          description: HTTP status code from the target
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        body:
+          type: string
+          description: Response body from the target
+        proxyUsed:
+          type: string
+          description: The upstream proxy ip:port used
+        latency:
+          type: integer
+          description: Request latency in milliseconds
+      required:
+        - status
+        - headers
+        - body
+        - proxyUsed
+        - latency
+
+    GatewayTestResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        originIp:
+          type: string
+          description: The IP address seen by the target (should be the proxy IP)
+        proxyUsed:
+          type: string
+          description: The upstream proxy ip:port used
+        latency:
+          type: integer
+          description: Request latency in milliseconds
+        status:
+          type: integer
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+
+    PaginatedProxies:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Proxy"
+        pagination:
+          $ref: "#/components/schemas/PaginationInfo"
+      required:
+        - data
+        - pagination
+
+    PaginationInfo:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        totalCount:
+          type: integer
+        totalPages:
+          type: integer
+      required:
+        - page
+        - limit
+        - totalCount
+        - totalPages
+
+    RequestStats:
+      type: object
+      properties:
+        totalRequests:
+          type: integer
+        successfulRequests:
+          type: integer
+        failedRequests:
+          type: integer
+        uniqueDomains:
+          type: integer
+        avgLatency:
+          type: number
+          nullable: true
+        topDomains:
+          type: array
+          items:
+            $ref: "#/components/schemas/DomainCount"
+        recentRequests:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecentRequest"
+      required:
+        - totalRequests
+        - successfulRequests
+        - failedRequests
+        - uniqueDomains
+        - avgLatency
+        - topDomains
+        - recentRequests
+
+    DomainCount:
+      type: object
+      properties:
+        domain:
+          type: string
+        count:
+          type: integer
+      required:
+        - domain
+        - count
+
+    RecentRequest:
+      type: object
+      properties:
+        targetDomain:
+          type: string
+        method:
+          type: string
+        timestamp:
+          type: number
+        latency:
+          type: number
+          nullable: true
+        success:
+          type: boolean
+        proxyUsed:
+          type: string
+      required:
+        - targetDomain
+        - method
+        - timestamp
+        - latency
+        - success
+        - proxyUsed
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error

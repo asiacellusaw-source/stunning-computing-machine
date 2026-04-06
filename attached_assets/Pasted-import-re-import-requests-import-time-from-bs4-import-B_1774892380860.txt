@@ -1,0 +1,267 @@
+import re
+import requests
+import time
+from bs4 import BeautifulSoup
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from rich.console import Console
+from rich.table import Table
+from rich.progress import Progress
+
+console = Console()
+
+proxy_sources = [
+    "https://www.sslproxies.org/",
+    "https://free-proxy-list.net/",
+    "https://www.us-proxy.org/",
+    "https://www.socks-proxy.net/",
+    "https://www.proxy-list.download/HTTP",
+    "https://www.proxy-list.download/HTTPS",
+    "https://www.proxy-list.download/SOCKS4",
+    "https://www.proxy-list.download/SOCKS5",
+    'https://cracked.miami/proxy/?type=proxy&limit=100',
+    'https://api.proxyscrape.com/v4/free-proxy-list/get?protocol=http&timeout=10000&country=all&ssl=all&anonymity=all&limit=2000&request=getproxies',
+    'https://www.freeproxy.world/?type=http&anonymity=&country=&speed=&port='
+]
+
+checked = set()
+working = []
+
+# ------------------ طرق الاستخراج ------------------
+def extract_regex(text): return re.findall(r'\d{1,3}(?:\.\d{1,3}){3}:\d{2,5}', text)
+
+def extract_table_class_table(soup):
+    proxies = []
+    for row in soup.select("table.table tbody tr"):
+        cols = row.find_all("td")
+        if len(cols) >= 2:
+            proxies.append(f"{cols[0].text.strip()}:{cols[1].text.strip()}")
+    return proxies
+
+def extract_ip_port_first_two_cols(soup):
+    proxies = []
+    for row in soup.select("table tbody tr"):
+        cols = row.find_all("td")
+        if len(cols) >= 2:
+            ip = cols[0].text.strip()
+            port = cols[1].text.strip()
+            if ip and port:
+                proxies.append(f"{ip}:{port}")
+    return proxies
+
+def extract_table_id_proxylist(soup):
+    proxies = []
+    for row in soup.select("table#proxylisttable tbody tr"):
+        cols = row.find_all("td")
+        if len(cols) >= 2:
+            proxies.append(f"{cols[0].text.strip()}:{cols[1].text.strip()}")
+    return proxies
+
+def extract_pre_tags(soup):
+    proxies = []
+    for pre in soup.find_all("pre"):
+        proxies.extend(extract_regex(pre.text))
+    return proxies
+
+def extract_code_tags(soup):
+    proxies = []
+    for code in soup.find_all("code"):
+        proxies.extend(extract_regex(code.text))
+    return proxies
+
+def extract_ip_port_td_a(soup):
+    proxies = []
+    for row in soup.select("table tbody tr"):
+        cols = row.find_all("td")
+        if len(cols) >= 2:
+            ip = cols[0].text.strip()
+            port_tag = cols[1].find("a")
+            port = port_tag.text.strip() if port_tag else cols[1].text.strip()
+            if ip and port:
+                proxies.append(f"{ip}:{port}")
+    return proxies
+
+def extract_json(text):
+    proxies = []
+    matches = re.findall(r'"(\d{1,3}(?:\.\d{1,3}){3}):(\d{2,5})"', text)
+    for ip, port in matches:
+        proxies.append(f"{ip}:{port}")
+    return proxies
+
+def extract_txt_lines(text):
+    proxies = []
+    for line in text.splitlines():
+        if re.match(r'\d{1,3}(?:\.\d{1,3}){3}:\d{2,5}', line.strip()):
+            proxies.append(line.strip())
+    return proxies
+
+def extract_divs(soup):
+    proxies = []
+    for div in soup.find_all("div"):
+        proxies.extend(extract_regex(div.text))
+    return proxies
+
+def extract_span(soup):
+    proxies = []
+    for span in soup.find_all("span"):
+        proxies.extend(extract_regex(span.text))
+    return proxies
+
+def extract_all_text(text): return extract_regex(text)
+
+# ------------------ جلب البروكسيات مع retries ------------------
+def fetch_proxies_from_source(url, retries=5):
+    for attempt in range(1, retries+1):
+        try:
+            headers = {"User-Agent": "Mozilla/5.0"}
+            resp = requests.get(url, headers=headers, timeout=120)
+            text = resp.text
+            soup = BeautifulSoup(text, "html.parser")
+
+            proxies = []
+            proxies.extend(extract_regex(text))
+            proxies.extend(extract_table_class_table(soup))
+            proxies.extend(extract_table_id_proxylist(soup))
+            proxies.extend(extract_pre_tags(soup))
+            proxies.extend(extract_code_tags(soup))
+            proxies.extend(extract_json(text))
+            proxies.extend(extract_txt_lines(text))
+            proxies.extend(extract_divs(soup))
+            proxies.extend(extract_span(soup))
+            proxies.extend(extract_all_text(text))
+            proxies.extend(extract_ip_port_td_a(soup))
+            proxies.extend(extract_ip_port_first_two_cols(soup))
+
+            if proxies:
+                return list(set(proxies))
+        except Exception as e:
+            console.print(f"[yellow]Retry {attempt}/{retries} failed for {url}: {e}[/yellow]")
+            time.sleep(2)
+    console.print(f"[red]All retries failed for {url}[/red]")
+    return []
+
+# ------------------ فحص البروكسي ------------------
+def check_proxy(proxy):
+    start = time.time()
+    try:
+        resp = requests.get("https://httpbin.org/ip",
+                            proxies={"http": "http://" + proxy, "https": "http://" + proxy},
+                            timeout=20)
+        latency = (time.time() - start) * 1000
+        if resp.status_code == 200:
+            return proxy, resp.json()["origin"], latency
+    except Exception:
+        return None
+    return None
+
+# ------------------ دورة واحدة ------------------
+def run_cycle():
+    console.print("[bold cyan]🔍 Fetching proxies from multiple sources...[/bold cyan]")
+
+    proxy_list = []
+    stats = {"success": 0, "fail": 0, "success_sources": [], "fail_sources": []}
+
+    # مصدر proxifly
+    try:
+        req32 = requests.get(
+            'https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/all/data.json',
+            timeout=30
+        ).json()
+        count = 0
+        for prp in req32:
+            if prp['protocol'] == 'http':
+                proxy_list.append(f"{prp['ip']}:{prp['port']}")
+                count += 1
+        stats["success"] += 1
+        stats["success_sources"].append(("proxifly (cdn.jsdelivr)", count))
+    except Exception as e:
+        console.print(f"[red]Error fetching from proxifly: {e}[/red]")
+        stats["fail"] += 1
+        stats["fail_sources"].append("proxifly (cdn.jsdelivr)")
+
+    # باقي المصادر باستخدام threads
+    with ThreadPoolExecutor(max_workers=20) as executor:
+        futures = {executor.submit(fetch_proxies_from_source, src): src for src in proxy_sources}
+        for future in as_completed(futures):
+            src = futures[future]
+            result = future.result()
+            if result:
+                proxy_list.extend(result)
+                stats["success"] += 1
+                stats["success_sources"].append((src, len(result)))
+            else:
+                stats["fail"] += 1
+                stats["fail_sources"].append(src)
+
+    proxy_list = list(set(proxy_list))
+    console.print(f"[bold magenta]Total fetched (unique): {len(proxy_list)} proxies[/bold magenta]")
+
+    # فحص البروكسيات
+    with Progress(console=console) as progress:
+        task = progress.add_task("[green]Checking proxies in parallel...", total=len(proxy_list))
+
+        with ThreadPoolExecutor(max_workers=100) as executor:
+            futures = {}
+            for proxy in proxy_list:
+                if proxy not in checked:
+                    checked.add(proxy)
+                    futures[executor.submit(check_proxy, proxy)] = proxy
+
+            for future in as_completed(futures):
+                result = future.result()
+                if result:
+                    working.append(result)
+                    with open("working_proxies.txt", "a") as f:
+                        f.write(f"{result[0]}\n")
+                progress.update(task, advance=1)
+
+    # جدول النتائج
+    table = Table(title="Proxy Check Results", show_lines=True)
+    table.add_column("Proxy", style="bold cyan")
+    table.add_column("Status", style="bold green")
+    table.add_column("IP Returned", style="bold magenta")
+    table.add_column("Latency (ms)", style="bold yellow")
+
+    for proxy, ip, latency in working[-20:]:
+        table.add_row(proxy, "✅ Working", ip, f"{latency:.1f}")
+
+    console.print(table)
+    console.print(f"[bold green]Total working proxies so far: {len(working)}[/bold green]")
+
+    # إحصائية المصادر
+        # إحصائية المصادر
+    total_sources = stats["success"] + stats["fail"]
+    success_rate = (stats["success"] / total_sources * 100) if total_sources else 0
+    console.print(f"[cyan]Sources success: {stats['success']}[/cyan]")
+    console.print(f"[red]Sources failed: {stats['fail']}[/red]")
+    console.print(f"[bold yellow]Success rate: {success_rate:.1f}%[/bold yellow]")
+
+    # جدول المصادر الناجحة والفاشلة مع فرز حسب عدد البروكسيات
+    summary_table = Table(title="Sources Summary", show_lines=True)
+    summary_table.add_column("Source", style="bold cyan")
+    summary_table.add_column("Status", style="bold green")
+    summary_table.add_column("Proxies Extracted", style="bold magenta")
+
+    # أولاً الناجحة (من الأكبر للأصغر)
+    for src, count in sorted(stats.get("success_sources", []), key=lambda x: x[1], reverse=True):
+        summary_table.add_row(src, "✅ Success", str(count))
+
+    # بعدها الفاشلة
+    for src in sorted(stats.get("fail_sources", [])):
+        summary_table.add_row(src, "[red]❌ Failed[/red]", "0")
+
+    console.print(summary_table)
+
+    # حساب المتوسط
+    if stats.get("success_sources"):
+        total_proxies = sum(count for _, count in stats["success_sources"])
+        avg_proxies = total_proxies / len(stats["success_sources"])
+        console.print(f"[bold cyan]Average proxies per successful source: {avg_proxies:.1f}[/bold cyan]")
+    else:
+        console.print("[bold red]No successful sources to calculate average[/bold red]")
+
+# ------------------ تشغيل مستمر ------------------
+if __name__ == "__main__":
+    while True:
+        run_cycle()
+        console.print("[yellow]Sleeping 60 seconds before next cycle...[/yellow]")
+        time.sleep(60)

@@ -1,0 +1,60 @@
+Build me a full-stack web application using FastAPI (backend) and Next.js (frontend) with the following features:
+
+1. Proxy Management:
+   - Upload a list of proxies in plain text format (each line ip:port).
+   - Store proxies in PostgreSQL or SQLite with fields: id, ip, port, status, latency, last_checked.
+   - Background task every 6 hours that checks all proxies:
+     - Remove dead proxies.
+     - Keep only working proxies.
+   - Manual "Check Health" button to verify proxies instantly.
+   - Smart Delete button with options:
+     - Delete All proxies.
+     - Delete only unverified proxies.
+     - Delete only failed (dead) proxies.
+     - Delete only working proxies.
+     - Delete by custom selection.
+
+2. Proxy Gateway:
+   - Expose a single proxy endpoint (ip:port:user:pass).
+   - Internally rotate requests across the working proxies in the pool.
+   - Support HTTP forwarding and HTTPS tunneling (CONNECT).
+   - Authentication required via Proxy-Authorization header (Basic auth).
+
+3. User Accounts:
+   - Registration with email verification (send verification code).
+   - Login system with JWT or session cookies.
+   - Dashboard for logged-in users showing:
+     - Proxy list.
+     - Stats (total proxies, working, failed).
+     - Options to upload, delete, check health.
+
+4. Admin Panel:
+   - Separate admin dashboard with login.
+   - Manage all users (list, delete, ban).
+   - View number of proxies per user.
+   - Global stats (total proxies across system).
+   - Ability to clear all proxies globally or by category (same smart delete options).
+
+5. Frontend (Next.js):
+   - Modern UI with tables, filters, search, and smart delete dropdown.
+   - Pages:
+     - Login / Register (with email verification).
+     - User Dashboard (Proxies management).
+     - Admin Dashboard (Users + global proxies).
+   - Responsive design.
+
+6. Scalability:
+   - Use asyncio for proxy checking tasks.
+   - Handle thousands of proxies efficiently.
+   - Support thousands of client requests per second.
+
+7. Deployment:
+   - Provide Dockerfile and instructions.
+   - Default port 8080.
+   - Environment variables for gateway credentials (GATEWAY_USER, GATEWAY_PASSWORD).
+
+Deliverables:
+- FastAPI backend code with proxy rotation logic and user management.
+- Next.js frontend with dashboards and smart delete options.
+- Database schema for proxies and users.
+- Dockerfile for deployment.

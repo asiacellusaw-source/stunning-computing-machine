@@ -1,0 +1,51 @@
+Build me a complete web application using FastAPI (backend) and Next.js (frontend) with the following features:
+
+1. Proxy Gateway:
+   - Expose a single proxy endpoint in the format ip:port:user:pass.
+   - Internally rotate requests across a large list of proxies (ip:port).
+   - Each client request is forwarded through a random working proxy from the list.
+   - Support both HTTP and HTTPS.
+
+2. Proxy Management Dashboard (Next.js frontend):
+   - Upload a list of proxies in plain text format (each line ip:port).
+   - View current proxies with details (IP, Port, Status, Latency, Last Checked).
+   - Delete or update proxies.
+   - Show statistics: total proxies, working proxies, failed proxies.
+   - Modern UI with tables, search, filters, and SSR for fast rendering.
+
+3. Backend (FastAPI):
+   - Store proxies in SQLite database with fields:
+     id, ip, port, status, latency, last_checked.
+   - Background task that continuously checks proxies for availability and updates their status.
+   - REST API endpoints:
+     - POST /upload_proxies (upload list of ip:port)
+     - GET /proxies (list all proxies with status)
+     - DELETE /proxies/{id}
+     - PUT /proxies/{id} (update proxy)
+     - GET /stats (return statistics)
+   - Gateway endpoint: /proxy (acts as single proxy ip:port:user:pass).
+
+4. Authentication:
+   - Gateway requires fixed username/password (e.g., user:pass).
+   - Dashboard login with admin credentials.
+
+5. Output:
+   - The gateway should expose one final proxy address in the format:
+     ```
+     ip:port:user:pass
+     ```
+   - Clients connect to this single proxy, while internally the app rotates through the uploaded list.
+
+6. Scalability:
+   - Use asyncio or concurrent futures for proxy checking.
+   - Handle thousands of requests per second.
+
+7. Deployment:
+   - Provide Dockerfile and instructions to run the app.
+   - Default port 8080.
+
+Deliverables:
+- FastAPI backend code with proxy rotation logic.
+- Next.js frontend dashboard with upload, view, delete, update, and stats.
+- SQLite schema for proxies.
+- Dockerfile for deployment.
